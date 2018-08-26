@@ -1,0 +1,51 @@
+[
+  {
+    "ParentShardId": "shardId-00000001535068618160-2db4715c",
+    "SequenceNumberRange": {
+      "EndingSequenceNumber": "25229400000000012670954371",
+      "StartingSequenceNumber": "25229400000000012670954371"
+    },
+    "ShardId": "shardId-00000001535083271146-6e0ef3a5"
+  },
+  {
+    "ParentShardId": "shardId-00000001535083271146-6e0ef3a5",
+    "SequenceNumberRange": {
+      "EndingSequenceNumber": "26091300000000012679033187",
+      "StartingSequenceNumber": "26091300000000012679033187"
+    },
+    "ShardId": "shardId-00000001535098920133-05e10aba"
+  },
+  {
+    "ParentShardId": "shardId-00000001535098920133-05e10aba",
+    "SequenceNumberRange": {
+      "EndingSequenceNumber": "26831200000000023725370094",
+      "StartingSequenceNumber": "26831200000000023725370094"
+    },
+    "ShardId": "shardId-00000001535112349034-12bd2c58"
+  },
+  {
+    "ParentShardId": "shardId-00000001535112349034-12bd2c58",
+    "SequenceNumberRange": {
+      "EndingSequenceNumber": "27589700000000038147978924",
+      "StartingSequenceNumber": "27589700000000038147978924"
+    },
+    "ShardId": "shardId-00000001535126119232-2c87677d"
+  },
+  {
+    "ParentShardId": "shardId-00000001535126119232-2c87677d",
+    "SequenceNumberRange": {
+      "EndingSequenceNumber": "28299600000000036635743275",
+      "StartingSequenceNumber": "28299600000000036635743275"
+    },
+    "ShardId": "shardId-00000001535139002824-8551ec4b"
+  },
+  {
+    "ParentShardId": "shardId-00000001535139002824-8551ec4b",
+    "SequenceNumberRange": {
+      "EndingSequenceNumber": null,
+      "StartingSequenceNumber": "28994300000000013666365470"
+    },
+    "ShardId": "shardId-00000001535151610690-856f1cc6"
+  }
+]
+
