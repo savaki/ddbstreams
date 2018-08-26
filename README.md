@@ -1,3 +1,5 @@
+[![GoDoc](https://godoc.org/github.com/savaki/ddbstreams?status.svg)](https://godoc.org/github.com/savaki/ddbstreams)
+
 ddbstreams
 --------------------------------------------------
 
