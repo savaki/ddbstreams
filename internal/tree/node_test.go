@@ -43,4 +43,22 @@ func TestParse(t *testing.T) {
 		reverseTree := Parse(reversed)
 		assert.EqualValues(t, tree, reverseTree)
 	})
+
+	t.Run("DFS", func(t *testing.T) {
+		var got []string
+		tree.DFS(func(shard *dynamodbstreams.Shard) bool {
+			got = append(got, *shard.ShardId)
+			return true
+		})
+
+		want := []string{
+			"shardId-00000001535083271146-6e0ef3a5",
+			"shardId-00000001535098920133-05e10aba",
+			"shardId-00000001535112349034-12bd2c58",
+			"shardId-00000001535126119232-2c87677d",
+			"shardId-00000001535139002824-8551ec4b",
+			"shardId-00000001535151610690-856f1cc6",
+		}
+		assert.Equal(t, want, got)
+	})
 }

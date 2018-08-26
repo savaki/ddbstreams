@@ -36,14 +36,14 @@ func (p *Processor) Subscribe(ctx context.Context, tableName string, h HandlerFu
 	}
 
 	sub := newSubscriber(ctx, subscriberConfig{
-		api:       p.api,
-		tableName: tableName,
-		streamArn: streamArn,
-		handler:   h,
-		offsets:   options.offsets,
-		delay:     options.delay,
-		debug:     options.debug,
-		trace:     options.trace,
+		api:          p.api,
+		tableName:    tableName,
+		streamArn:    streamArn,
+		handler:      h,
+		offsets:      options.offsets,
+		pollInterval: options.pollInterval,
+		debug:        options.debug,
+		trace:        options.trace,
 	})
 
 	return sub, nil

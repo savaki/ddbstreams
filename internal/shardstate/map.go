@@ -97,7 +97,7 @@ func (r *Registry) FindState(shardID string) (State, bool) {
 // flushExpiredStates deletes all states that have not been accessed in over 18hrs
 // Given that dynamodb only holds 24 hours of stream data, this should be fine.
 // Returns the number of records flushed.
-func (r *Registry) flushExpiredStates(cutoff time.Time) (n int) {
+func (r *Registry) Flush(cutoff time.Time) (n int) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -127,7 +127,7 @@ func (r *Registry) mainLoop(ctx context.Context, flush time.Duration) {
 			return
 
 		case <-ticker.C:
-			r.flushExpiredStates(time.Now().Add(-maxAge))
+			r.Flush(time.Now().Add(-maxAge))
 		}
 	}
 }

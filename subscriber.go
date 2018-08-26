@@ -16,7 +16,6 @@ package ddbstreams
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
@@ -26,7 +25,11 @@ import (
 	"github.com/savaki/ddbstreams/internal/shardstate"
 )
 
-const limit = int64(1000)
+const (
+	limit                 = int64(1000)
+	defaultPollInterval   = time.Second
+	defaultOffsetInterval = time.Minute
+)
 
 type offset struct {
 	SequenceNumber string
@@ -51,9 +54,13 @@ type Subscriber struct {
 
 // Close the subscription, freeing any consumed resources
 func (s *Subscriber) Close() error {
+	s.config.debug("cancel()")
 	s.cancel()
+	s.config.debug("<-s.done")
 	<-s.done
+	s.config.debug("s.wg.Wait()")
 	s.wg.Wait()
+	s.config.debug("return nil")
 	return nil
 }
 
@@ -120,7 +127,7 @@ func (s *Subscriber) readRecords(ctx context.Context, shardID string, iterator *
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-time.After(s.config.delay):
+		case <-time.After(s.config.pollInterval):
 		}
 	}
 }
@@ -157,12 +164,17 @@ func (s *Subscriber) readShard(ctx context.Context, shard *dynamodbstreams.Shard
 	}
 
 	if err := s.readRecords(ctx, *shard.ShardId, out.ShardIterator, completed); err != nil {
-		log.Println("unable to process shard", err)
+		s.config.debug("unable to process shard", err)
 		return
 	}
 
 	s.states.MarkCompleted(*shard.ShardId)
-	s.refresh <- struct{}{}
+
+	select {
+	case <-ctx.Done():
+		return
+	case s.refresh <- struct{}{}:
+	}
 }
 
 func (s *Subscriber) spawnAll(ctx context.Context, offsets []Offset) error {
@@ -221,6 +233,38 @@ func (s *Subscriber) spawnAll(ctx context.Context, offsets []Offset) error {
 	return nil
 }
 
+func (s *Subscriber) publishOffsets(ctx context.Context) {
+	if s.config.offsetManager == nil || s.config.groupID == "" {
+		return
+	}
+
+	var offsets []Offset
+
+	s.mutex.Lock()
+	for shardID, v := range s.offsets {
+		offsets = append(offsets, Offset{
+			ShardID:        shardID,
+			SequenceNumber: v.SequenceNumber,
+		})
+	}
+	s.mutex.Unlock()
+
+	for attempt := 1; attempt < 4; attempt++ {
+		if err := s.config.offsetManager.Save(ctx, s.config.groupID, s.config.tableName, offsets...); err != nil {
+			s.config.debug("unable to save offsets,", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Duration(attempt*attempt) * time.Second):
+			}
+		}
+
+		break
+	}
+
+	s.config.debug("successfully saved offsets")
+}
+
 func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
 	defer close(s.done)
 
@@ -230,13 +274,16 @@ func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
 	// spawn initial shard readers
 	//
 	if err := s.spawnAll(ctx, offsets); err != nil {
-		log.Println("failed to spawn readers -", err)
+		s.config.debug("failed to spawn readers -", err)
 	} else {
 		offsets = nil // only need offsets until the first successful spawning
 	}
 
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
+
+	offsetTicker := time.NewTicker(s.config.offsetInterval)
+	defer offsetTicker.Stop()
 
 	// periodically rebuild shard tree and launch reader for any new
 	// shards we may come across
@@ -251,6 +298,9 @@ func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
 				continue
 			}
 
+		case <-offsetTicker.C:
+			go s.publishOffsets(ctx)
+
 		case <-ticker.C:
 			if err := s.spawnAll(ctx, offsets); err != nil {
 				continue
@@ -261,14 +311,17 @@ func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
 }
 
 type subscriberConfig struct {
-	api       dynamodbstreamsiface.DynamoDBStreamsAPI
-	tableName string                    // tableName being read from
-	streamArn string                    // streamArn being read from
-	handler   HandlerFunc               // handler that will process the records
-	offsets   []Offset                  // offsets hold initial starting positions (optional)
-	delay     time.Duration             // delay between polling (when no records returned)
-	debug     func(args ...interface{}) // log provides generic logging interface
-	trace     func(args ...interface{}) // debug provides generic logging interface
+	api            dynamodbstreamsiface.DynamoDBStreamsAPI
+	tableName      string                    // tableName being read from
+	streamArn      string                    // streamArn being read from
+	handler        HandlerFunc               // handler that will process the records
+	offsets        []Offset                  // offsets hold initial starting positions (optional)
+	pollInterval   time.Duration             // delay between polling (when no records returned)
+	groupID        string                    // groupID uniquely identifier the subscriber; similar to Kafka groupID
+	offsetManager  OffsetManager             // offsetManager defines save and restore of offsets
+	offsetInterval time.Duration             // offsetInterval defines interval to commit offsets
+	debug          func(args ...interface{}) // log provides generic logging interface
+	trace          func(args ...interface{}) // debug provides generic logging interface
 }
 
 func newSubscriber(ctx context.Context, config subscriberConfig) *Subscriber {
@@ -281,8 +334,11 @@ func newSubscriber(ctx context.Context, config subscriberConfig) *Subscriber {
 	if config.trace == nil {
 		config.trace = func(...interface{}) {}
 	}
-	if config.delay == 0 {
-		config.delay = time.Second
+	if config.pollInterval == 0 {
+		config.pollInterval = defaultPollInterval
+	}
+	if config.offsetInterval == 0 {
+		config.offsetInterval = defaultOffsetInterval
 	}
 
 	config.debug("subscribing to stream arn;", config.streamArn)
