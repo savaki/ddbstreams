@@ -107,7 +107,7 @@ func createRecords(t *testing.T, ddb *dynamodb.DynamoDB, tableName string, n int
 	}
 }
 
-func TestStreams(t *testing.T) {
+func TestStreamContinuesFromLastCommit(t *testing.T) {
 	t.Parallel()
 
 	withTable(t, func(ddb *dynamodb.DynamoDB, streams *dynamodbstreams.DynamoDBStreams, tableName string) {
@@ -158,5 +158,36 @@ func TestStreams(t *testing.T) {
 		sub2.Wait()
 
 		time.Sleep(500 * time.Millisecond)
+	})
+}
+
+func TestStreams(t *testing.T) {
+	t.Parallel()
+
+	withTable(t, func(ddb *dynamodb.DynamoDB, streams *dynamodbstreams.DynamoDBStreams, tableName string) {
+		n := 20
+		createRecords(t, ddb, tableName, n)
+
+		var sub *Subscriber
+		var err error
+
+		received := 0
+		handler := func(ctx context.Context, record *dynamodbstreams.StreamRecord) error {
+			fmt.Println(*record.NewImage["id"].S)
+
+			received++
+			if received == n {
+				sub.Flush()
+				sub.Close()
+				return nil
+			}
+
+			return nil
+		}
+
+		p := New(streams)
+		sub, err = p.Subscribe(context.Background(), tableName, handler)
+		assert.Nil(t, err)
+		sub.Wait()
 	})
 }
