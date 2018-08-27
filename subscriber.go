@@ -50,18 +50,25 @@ type Subscriber struct {
 
 	mutex   sync.Mutex
 	offsets map[string]offset
+	err     error
+}
+
+func (s *Subscriber) Wait() error {
+	<-s.done
+	return s.err
 }
 
 // Close the subscription, freeing any consumed resources
 func (s *Subscriber) Close() error {
-	s.config.debug("cancel()")
 	s.cancel()
-	s.config.debug("<-s.done")
 	<-s.done
-	s.config.debug("s.wg.Wait()")
 	s.wg.Wait()
-	s.config.debug("return nil")
-	return nil
+	return s.err
+}
+
+// Flush offsets to persistent store
+func (s *Subscriber) Flush() {
+	s.publishOffsets(context.Background())
 }
 
 func (s *Subscriber) commit(shardID, sequenceNumber string) {
@@ -184,6 +191,8 @@ func (s *Subscriber) spawnAll(ctx context.Context, offsets []Offset) error {
 		return err
 	}
 
+	spawned := map[string]struct{}{} // shards spawned in this session
+
 	for _, offset := range offsets {
 		node, ok := root.Find(&offset.ShardID)
 		if !ok {
@@ -198,6 +207,7 @@ func (s *Subscriber) spawnAll(ctx context.Context, offsets []Offset) error {
 			}
 		}
 
+		spawned[*node.Shard.ShardId] = struct{}{}
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
@@ -207,6 +217,10 @@ func (s *Subscriber) spawnAll(ctx context.Context, offsets []Offset) error {
 	}
 
 	root.DFS(func(shard *dynamodbstreams.Shard) bool {
+		if _, ok := spawned[*shard.ShardId]; ok {
+			return false // already spawned; stop dfs
+		}
+
 		state, ok := s.states.FindState(*shard.ShardId)
 		s.config.trace(*shard.ShardId, "states.FindState", state, ok)
 
@@ -259,10 +273,9 @@ func (s *Subscriber) publishOffsets(ctx context.Context) {
 			}
 		}
 
+		s.config.debug("saved offsets", offsets)
 		break
 	}
-
-	s.config.debug("successfully saved offsets")
 }
 
 func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
@@ -294,9 +307,10 @@ func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
 			return
 
 		case <-s.refresh:
-			if err := s.spawnAll(ctx, nil); err != nil {
+			if err := s.spawnAll(ctx, offsets); err != nil {
 				continue
 			}
+			offsets = nil
 
 		case <-offsetTicker.C:
 			go s.publishOffsets(ctx)
@@ -324,7 +338,7 @@ type subscriberConfig struct {
 	trace          func(args ...interface{}) // debug provides generic logging interface
 }
 
-func newSubscriber(ctx context.Context, config subscriberConfig) *Subscriber {
+func newSubscriber(ctx context.Context, config subscriberConfig) (*Subscriber, error) {
 	if config.debug == nil {
 		config.debug = config.trace
 	}
@@ -343,6 +357,23 @@ func newSubscriber(ctx context.Context, config subscriberConfig) *Subscriber {
 
 	config.debug("subscribing to stream arn;", config.streamArn)
 
+	// retrieve existing offsets
+	if config.groupID != "" && config.offsetManager != nil {
+		if v, ok := config.offsetManager.(ddbOffsetManager); ok {
+			if err := v.ensureTableExists(ctx, config.debug); err != nil {
+				return nil, err
+			}
+		}
+
+		config.debug("looking for offsets for", config.tableName, "with groupID,", config.groupID)
+		offsets, err := config.offsetManager.Find(ctx, config.groupID, config.tableName)
+		if err != nil {
+			return nil, err
+		}
+		config.debug("found offsets", offsets)
+		config.offsets = offsets
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	sub := &Subscriber{
 		cancel:  cancel,
@@ -353,5 +384,5 @@ func newSubscriber(ctx context.Context, config subscriberConfig) *Subscriber {
 		offsets: map[string]offset{},
 	}
 	go sub.mainLoop(ctx, config.offsets)
-	return sub
+	return sub, nil
 }

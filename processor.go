@@ -35,18 +35,19 @@ func (p *Processor) Subscribe(ctx context.Context, tableName string, h HandlerFu
 		return nil, err
 	}
 
-	sub := newSubscriber(ctx, subscriberConfig{
-		api:          p.api,
-		tableName:    tableName,
-		streamArn:    streamArn,
-		handler:      h,
-		offsets:      options.offsets,
-		pollInterval: options.pollInterval,
-		debug:        options.debug,
-		trace:        options.trace,
+	return newSubscriber(ctx, subscriberConfig{
+		api:            p.api,
+		tableName:      tableName,
+		streamArn:      streamArn,
+		handler:        h,
+		offsets:        options.offsets,
+		groupID:        options.groupID,
+		offsetManager:  options.offsetManager,
+		offsetInterval: options.offsetInterval,
+		pollInterval:   options.pollInterval,
+		debug:          options.debug,
+		trace:          options.trace,
 	})
-
-	return sub, nil
 }
 
 func New(api dynamodbstreamsiface.DynamoDBStreamsAPI) *Processor {

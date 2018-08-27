@@ -30,6 +30,7 @@ type Options struct {
 	pollInterval   time.Duration
 	debug          func(args ...interface{})
 	trace          func(args ...interface{})
+	groupID        string
 	offsetManager  OffsetManager
 	offsetInterval time.Duration
 }
@@ -60,6 +61,12 @@ func WithDebug(logFunc func(args ...interface{})) Option {
 func WithTrace(printFunc func(args ...interface{})) Option {
 	return func(o *Options) {
 		o.trace = printFunc
+	}
+}
+
+func WithGroupID(groupID string) Option {
+	return func(o *Options) {
+		o.groupID = groupID
 	}
 }
 

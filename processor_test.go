@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodbstreams"
+	"github.com/savaki/randx"
 	"github.com/tj/assert"
 )
 
@@ -92,36 +94,69 @@ func withTable(t *testing.T, callback func(ddb *dynamodb.DynamoDB, streams *dyna
 	callback(ddb, streams, tableName)
 }
 
+func createRecords(t *testing.T, ddb *dynamodb.DynamoDB, tableName string, n int) {
+	for i := 1; i <= n; i++ {
+		_, err := ddb.PutItem(&dynamodb.PutItemInput{
+			TableName: aws.String(tableName),
+			Item: map[string]*dynamodb.AttributeValue{
+				"id":   {S: aws.String(strconv.Itoa(i))},
+				"date": {S: aws.String(time.Now().Format(time.RFC850))},
+			},
+		})
+		assert.Nil(t, err)
+	}
+}
+
 func TestStreams(t *testing.T) {
 	t.Parallel()
 
 	withTable(t, func(ddb *dynamodb.DynamoDB, streams *dynamodbstreams.DynamoDBStreams, tableName string) {
-		p := New(streams)
-		received := map[string]struct{}{}
+		n := 20
+		createRecords(t, ddb, tableName, n)
 
-		fn := func(ctx context.Context, record *dynamodbstreams.StreamRecord) error {
-			id := *record.Keys["id"].S
-			received[id] = struct{}{}
+		var sub1 *Subscriber
+		var sub2 *Subscriber
+		var err error
+
+		received := 0
+		part1 := func(ctx context.Context, record *dynamodbstreams.StreamRecord) error {
+			received++
+			if received >= n/2 && sub1 != nil {
+				sub1.Flush()
+				sub1.Close()
+				return nil
+			}
+
+			fmt.Println("1 -", *record.NewImage["id"].S)
+			return nil
+		}
+		part2 := func(ctx context.Context, record *dynamodbstreams.StreamRecord) error {
+			fmt.Println("2 -", *record.NewImage["id"].S)
+
+			received++
+			if received >= n {
+				sub2.Close()
+			}
 			return nil
 		}
 
-		sub, err := p.Subscribe(context.Background(), tableName, fn)
+		groupID := "abc"
+		commitTable := "commits-" + randx.AlphaN(10)
+		p := New(streams)
+
+		sub1, err = p.Subscribe(context.Background(), tableName, part1,
+			WithGroupID(groupID),
+			WithOffsetInDynamoDB(ddb, commitTable),
+		)
+		sub1.Wait()
+
+		sub2, err = p.Subscribe(context.Background(), tableName, part2,
+			WithGroupID(groupID),
+			WithOffsetInDynamoDB(ddb, commitTable),
+		)
 		assert.Nil(t, err)
-		defer sub.Close()
+		sub2.Wait()
 
-		want := 100
-		for i := 1; i <= want; i++ {
-			_, err := ddb.PutItem(&dynamodb.PutItemInput{
-				TableName: aws.String(tableName),
-				Item: map[string]*dynamodb.AttributeValue{
-					"id":   {S: aws.String(strconv.Itoa(i))},
-					"date": {S: aws.String(time.Now().Format(time.RFC850))},
-				},
-			})
-			assert.Nil(t, err)
-		}
-
-		time.Sleep(time.Second)
-		assert.Len(t, received, want)
+		time.Sleep(500 * time.Millisecond)
 	})
 }
