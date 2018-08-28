@@ -1,0 +1,21 @@
+sudo: required
+
+services:
+  - docker
+
+language: go
+
+go_import_path: github.com/savaki/ddbstreams
+
+before_install:
+  - docker pull amazon/dynamodb-local:latest
+  - docker run -d -p 127.0.0.1:8000:8000 amazon/dynamodb-local:latest
+  - get -t ./...
+
+go:
+  - "1.8.x"
+  - "1.9.x"
+  - "1.10.x"
+  - "1.11.x"
+
+script: go test ./...
