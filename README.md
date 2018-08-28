@@ -1,4 +1,5 @@
 [![GoDoc](https://godoc.org/github.com/savaki/ddbstreams?status.svg)](https://godoc.org/github.com/savaki/ddbstreams)
+[![Build Status](https://travis-ci.org/savaki/ddbstreams.svg?branch=master)](https://travis-ci.org/savaki/ddbstreams)
 
 ddbstreams
 --------------------------------------------------
