@@ -26,8 +26,9 @@ type Offset struct {
 }
 
 type Options struct {
-	offsets        []Offset
-	pollInterval   time.Duration
+	autoCommit     bool          // autoCommit forces publish after every commit
+	offsets        []Offset      // offsets holds optional starting offsets
+	pollInterval   time.Duration // pollInterval specifies time between polling an open stream
 	debug          func(args ...interface{})
 	trace          func(args ...interface{})
 	groupID        string
@@ -70,13 +71,26 @@ func WithGroupID(groupID string) Option {
 	}
 }
 
-func WithOffsetInDynamoDB(api dynamodbiface.DynamoDBAPI, tableName string) Option {
+// WithAutoCommit indicates offsets should be saved after each successful commit.
+// Caution should be used when enabling this as streams with high traffic will
+// generate a significant number of commits.
+func WithAutoCommit() Option {
 	return func(o *Options) {
-		o.offsetManager = ddbOffsetManager{
-			api:       api,
-			tableName: tableName,
-		}
+		o.autoCommit = true
 	}
+}
+
+func WithOffsetManager(manager OffsetManager) Option {
+	return func(o *Options) {
+		o.offsetManager = manager
+	}
+}
+
+func WithOffsetManagerDynamoDB(api dynamodbiface.DynamoDBAPI, tableName string) Option {
+	return WithOffsetManager(ddbOffsetManager{
+		api:       api,
+		tableName: tableName,
+	})
 }
 
 func WithOffsetInterval(interval time.Duration) Option {

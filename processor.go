@@ -45,6 +45,7 @@ func (p *Processor) Subscribe(ctx context.Context, tableName string, h HandlerFu
 		offsetManager:  options.offsetManager,
 		offsetInterval: options.offsetInterval,
 		pollInterval:   options.pollInterval,
+		autoCommit:     options.autoCommit,
 		debug:          options.debug,
 		trace:          options.trace,
 	})

@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"strconv"
 	"testing"
 	"time"
@@ -146,13 +147,13 @@ func TestStreamContinuesFromLastCommit(t *testing.T) {
 
 		sub1, err = p.Subscribe(context.Background(), tableName, part1,
 			WithGroupID(groupID),
-			WithOffsetInDynamoDB(ddb, commitTable),
+			WithOffsetManagerDynamoDB(ddb, commitTable),
 		)
 		sub1.Wait()
 
 		sub2, err = p.Subscribe(context.Background(), tableName, part2,
 			WithGroupID(groupID),
-			WithOffsetInDynamoDB(ddb, commitTable),
+			WithOffsetManagerDynamoDB(ddb, commitTable),
 		)
 		assert.Nil(t, err)
 		sub2.Wait()
@@ -187,6 +188,44 @@ func TestStreams(t *testing.T) {
 
 		p := New(streams)
 		sub, err = p.Subscribe(context.Background(), tableName, handler)
+		assert.Nil(t, err)
+		sub.Wait()
+	})
+}
+
+func TestStreamsAutoCommit(t *testing.T) {
+	t.Parallel()
+
+	withTable(t, func(ddb *dynamodb.DynamoDB, streams *dynamodbstreams.DynamoDBStreams, tableName string) {
+		n := 20
+		createRecords(t, ddb, tableName, n)
+
+		var sub *Subscriber
+		var err error
+
+		received := 0
+		handler := func(ctx context.Context, record *dynamodbstreams.StreamRecord) error {
+			fmt.Println(*record.NewImage["id"].S)
+
+			received++
+			if received == n {
+				sub.Flush()
+				sub.Close()
+				return nil
+			}
+
+			return nil
+		}
+
+
+
+		p := New(streams)
+		sub, err = p.Subscribe(context.Background(), tableName, handler,
+			WithTrace(log.Println),
+			WithGroupID("abc"),
+			WithOffsetManagerDynamoDB(ddb, "offsets"),
+			WithAutoCommit(),
+		)
 		assert.Nil(t, err)
 		sub.Wait()
 	})

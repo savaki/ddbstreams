@@ -41,12 +41,14 @@ type HandlerFunc func(ctx context.Context, record *dynamodbstreams.StreamRecord)
 
 // Subscriber reference the subscription to the stream
 type Subscriber struct {
-	cancel  context.CancelFunc
-	done    chan struct{}
-	wg      sync.WaitGroup
-	config  subscriberConfig
-	states  *shardstate.Registry // states holds processing state for shards
-	refresh chan struct{}        // refresh shard tree request; new shards may be present
+	cancel      context.CancelFunc
+	donePublish chan struct{}
+	doneSpawn   chan struct{}
+	wg          sync.WaitGroup
+	config      subscriberConfig
+	states      *shardstate.Registry // states holds processing state for shards
+	refresh     chan struct{}        // refresh shard tree request; new shards may be present
+	publish     chan struct{}        // publish offsets requested
 
 	mutex   sync.Mutex
 	offsets map[string]offset
@@ -54,14 +56,15 @@ type Subscriber struct {
 }
 
 func (s *Subscriber) Wait() error {
-	<-s.done
+	<-s.doneSpawn
 	return s.err
 }
 
 // Close the subscription, freeing any consumed resources
 func (s *Subscriber) Close() error {
 	s.cancel()
-	<-s.done
+	<-s.donePublish
+	<-s.doneSpawn
 	s.wg.Wait()
 	return s.err
 }
@@ -86,6 +89,14 @@ func (s *Subscriber) commit(shardID, sequenceNumber string) {
 	s.offsets[shardID] = offset{
 		SequenceNumber: sequenceNumber,
 		CommittedAt:    time.Now(),
+	}
+
+	if s.config.autoCommit {
+		s.config.trace(shardID, "autoCommit enabled; publish requested")
+		select {
+		case s.publish <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -280,8 +291,35 @@ func (s *Subscriber) publishOffsets(ctx context.Context) {
 	}
 }
 
-func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
-	defer close(s.done)
+func (s *Subscriber) publishLoop(ctx context.Context) {
+	defer close(s.donePublish)
+
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		s.publishOffsets(ctx)
+	}()
+
+	ticker := time.NewTicker(s.config.offsetInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-s.publish:
+			s.publishOffsets(ctx)
+
+		case <-ticker.C:
+			s.publishOffsets(ctx)
+		}
+	}
+}
+
+func (s *Subscriber) spawnLoop(ctx context.Context, offsets []Offset) {
+	defer close(s.doneSpawn)
 
 	s.config.trace("main loop")
 	defer s.config.trace("end main loop")
@@ -297,9 +335,6 @@ func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
-	offsetTicker := time.NewTicker(s.config.offsetInterval)
-	defer offsetTicker.Stop()
-
 	// periodically rebuild shard tree and launch reader for any new
 	// shards we may come across
 	//
@@ -313,9 +348,6 @@ func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
 				continue
 			}
 			offsets = nil
-
-		case <-offsetTicker.C:
-			s.publishOffsets(ctx)
 
 		case <-ticker.C:
 			if err := s.spawnAll(ctx, offsets); err != nil {
@@ -336,6 +368,7 @@ type subscriberConfig struct {
 	groupID        string                    // groupID uniquely identifier the subscriber; similar to Kafka groupID
 	offsetManager  OffsetManager             // offsetManager defines save and restore of offsets
 	offsetInterval time.Duration             // offsetInterval defines interval to commit offsets
+	autoCommit     bool                      // autoCommit forces publish after every commit (use sparingly)
 	debug          func(args ...interface{}) // log provides generic logging interface
 	trace          func(args ...interface{}) // debug provides generic logging interface
 }
@@ -362,7 +395,8 @@ func newSubscriber(ctx context.Context, config subscriberConfig) (*Subscriber, e
 	// retrieve existing offsets
 	if config.groupID != "" && config.offsetManager != nil {
 		if v, ok := config.offsetManager.(ddbOffsetManager); ok {
-			if err := v.ensureTableExists(ctx, config.debug); err != nil {
+			config.trace("ensuring table exists,", v.tableName)
+			if err := v.createTableIfNotExists(ctx, config.debug); err != nil {
 				return nil, err
 			}
 		}
@@ -378,13 +412,17 @@ func newSubscriber(ctx context.Context, config subscriberConfig) (*Subscriber, e
 
 	ctx, cancel := context.WithCancel(ctx)
 	sub := &Subscriber{
-		cancel:  cancel,
-		done:    make(chan struct{}),
-		config:  config,
-		states:  shardstate.New(0),
-		refresh: make(chan struct{}, 1),
-		offsets: map[string]offset{},
+		cancel:      cancel,
+		donePublish: make(chan struct{}),
+		doneSpawn:   make(chan struct{}),
+		config:      config,
+		states:      shardstate.New(0),
+		refresh:     make(chan struct{}, 1),
+		publish:     make(chan struct{}, 1),
+		offsets:     map[string]offset{},
 	}
-	go sub.mainLoop(ctx, config.offsets)
+	go sub.publishLoop(ctx)
+	go sub.spawnLoop(ctx, config.offsets)
+
 	return sub, nil
 }

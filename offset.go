@@ -76,7 +76,7 @@ func (d ddbOffsetManager) createTable(ctx context.Context, logFunc func(...inter
 	return nil
 }
 
-func (d ddbOffsetManager) ensureTableExists(ctx context.Context, logFunc func(...interface{})) error {
+func (d ddbOffsetManager) createTableIfNotExists(ctx context.Context, logFunc func(...interface{})) error {
 	input := dynamodb.DescribeTableInput{
 		TableName: aws.String(d.tableName),
 	}

@@ -32,7 +32,7 @@ func TestOffsetManager(t *testing.T) {
 		api:       api,
 		tableName: "commits",
 	}
-	err := mgr.ensureTableExists(ctx, debug.Println)
+	err := mgr.createTableIfNotExists(ctx, debug.Println)
 	assert.Nil(t, err)
 
 	defer func() {
