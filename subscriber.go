@@ -66,6 +66,13 @@ func (s *Subscriber) Close() error {
 	return s.err
 }
 
+func (s *Subscriber) refreshShardTree() {
+	select {
+	case s.refresh <- struct{}{}:
+	default:
+	}
+}
+
 // Flush offsets to persistent store
 func (s *Subscriber) Flush() {
 	s.publishOffsets(context.Background())
@@ -176,12 +183,7 @@ func (s *Subscriber) readShard(ctx context.Context, shard *dynamodbstreams.Shard
 	}
 
 	s.states.MarkCompleted(*shard.ShardId)
-
-	select {
-	case <-ctx.Done():
-		return
-	case s.refresh <- struct{}{}:
-	}
+	s.refreshShardTree()
 }
 
 func (s *Subscriber) spawnAll(ctx context.Context, offsets []Offset) error {
@@ -313,7 +315,7 @@ func (s *Subscriber) mainLoop(ctx context.Context, offsets []Offset) {
 			offsets = nil
 
 		case <-offsetTicker.C:
-			go s.publishOffsets(ctx)
+			s.publishOffsets(ctx)
 
 		case <-ticker.C:
 			if err := s.spawnAll(ctx, offsets); err != nil {
@@ -380,7 +382,7 @@ func newSubscriber(ctx context.Context, config subscriberConfig) (*Subscriber, e
 		done:    make(chan struct{}),
 		config:  config,
 		states:  shardstate.New(0),
-		refresh: make(chan struct{}),
+		refresh: make(chan struct{}, 1),
 		offsets: map[string]offset{},
 	}
 	go sub.mainLoop(ctx, config.offsets)
