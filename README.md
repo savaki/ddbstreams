@@ -47,3 +47,10 @@ func main() {
 	time.Sleep(5 * time.Second)
 }
 ```
+
+
+### Options
+
+* `WithOffsetManager` - defines storage for persistent offsets
+* `WithAutoCommit` - requests offsets be published after every commit.  Only used in
+conjunction with `WithOffsetManager` or `WithOffsetManagerDynamoDB`
