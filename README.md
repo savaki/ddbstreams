@@ -6,6 +6,18 @@ ddbstreams
 
 `ddbstreams` is a `DynamoDB Streams` consumer.
 
+### Usage
+
+When subscribing to a table with `ddbstreams`, a goroutine will be spawned that periodically 
+polls the underlying dynamodb stream for the table. `ddbstreams` handles tracking stream splits.
+Records from a given stream shard will be processed in order, but there's no ordering guarantee
+between peer stream shards.
+
+### Offsets
+
+`ddbstreams` keeps track of offsets and allows the stream processor to continue from where it
+left off similar to a Kafka consumer.
+
 ### Example
 
 ```go
