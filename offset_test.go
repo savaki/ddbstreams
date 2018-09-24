@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/tj/assert"
 )
 
 var debug = log.New(ioutil.Discard, log.Prefix(), log.LstdFlags)
@@ -33,15 +32,21 @@ func TestOffsetManager(t *testing.T) {
 		tableName: "commits",
 	}
 	err := mgr.createTableIfNotExists(ctx, debug.Println)
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("got %v; want nil", err)
+	}
 
 	defer func() {
 		debug.Println("deleting table,", mgr.tableName)
 		_, err = api.DeleteTable(&dynamodb.DeleteTableInput{TableName: aws.String(mgr.tableName)})
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 
 		err = api.WaitUntilTableNotExists(&dynamodb.DescribeTableInput{TableName: aws.String(mgr.tableName)})
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 		debug.Println("table deleted")
 	}()
 
@@ -54,10 +59,16 @@ func TestOffsetManager(t *testing.T) {
 		}
 
 		err := mgr.Save(ctx, groupID, tableName, offset)
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 
 		offsets, err := mgr.Find(ctx, groupID, tableName)
-		assert.Nil(t, err)
-		assert.Len(t, offsets, 1)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
+		if got, want := len(offsets), 1; got != want {
+			t.Fatalf("got %v; want %v", got, want)
+		}
 	})
 }

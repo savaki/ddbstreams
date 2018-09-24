@@ -3,8 +3,6 @@ package shardstate
 import (
 	"testing"
 	"time"
-
-	"github.com/tj/assert"
 )
 
 func TestRegistry(t *testing.T) {
@@ -13,8 +11,15 @@ func TestRegistry(t *testing.T) {
 		registry := New(time.Hour)
 		defer registry.Close()
 
-		assert.True(t, registry.MarkProcessing(shardID))  // 1st - ok
-		assert.False(t, registry.MarkProcessing(shardID)) // 2nd - fails; already processing
+		// 1st - ok
+		if ok := registry.MarkProcessing(shardID); !ok {
+			t.Fatalf("got false; want true")
+		}
+
+		// 2nd - fails; already processing
+		if ok := registry.MarkProcessing(shardID); ok {
+			t.Fatalf("got true; want false")
+		}
 	})
 
 	t.Run("MarkProcessing - on completed record", func(t *testing.T) {
@@ -23,7 +28,9 @@ func TestRegistry(t *testing.T) {
 		defer registry.Close()
 
 		registry.MarkCompleted(shardID)
-		assert.False(t, registry.MarkProcessing(shardID)) // fails; already completed
+		if ok := registry.MarkProcessing(shardID); ok { // fails; already completed
+			t.Fatalf("got true; want false")
+		}
 	})
 
 	t.Run("FindState", func(t *testing.T) {
@@ -31,18 +38,27 @@ func TestRegistry(t *testing.T) {
 		registry := New(time.Hour)
 		defer registry.Close()
 
-		_, ok := registry.FindState(shardID)
-		assert.False(t, ok)
+		if _, ok := registry.FindState(shardID); ok {
+			t.Fatalf("got true; want false")
+		}
 
 		registry.MarkProcessing(shardID)
 		state, ok := registry.FindState(shardID)
-		assert.True(t, ok)
-		assert.Equal(t, Processing, state)
+		if !ok {
+			t.Fatalf("got false; want true")
+		}
+		if got, want := state, Processing; got != want {
+			t.Fatalf("got %v; want %v", got, want)
+		}
 
 		registry.MarkCompleted(shardID)
 		state, ok = registry.FindState(shardID)
-		assert.True(t, ok)
-		assert.Equal(t, Completed, state)
+		if !ok {
+			t.Fatalf("got false; want true")
+		}
+		if got, want := state, Completed; got != want {
+			t.Fatalf("got %v; want %v", got, want)
+		}
 	})
 
 	t.Run("Flush", func(t *testing.T) {
@@ -53,9 +69,12 @@ func TestRegistry(t *testing.T) {
 		registry.MarkProcessing(shardID)
 
 		n := registry.Flush(time.Now().Add(defaultFlushInterval + time.Hour))
-		assert.Equal(t, 1, n)
+		if got, want := n, 1; got != want {
+			t.Fatalf("got %v; want %v", got, want)
+		}
 
-		_, ok := registry.FindState(shardID)
-		assert.False(t, ok)
+		if _, ok := registry.FindState(shardID); ok {
+			t.Fatalf("got true; want false")
+		}
 	})
 }

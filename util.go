@@ -20,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodbstreams"
 	"github.com/aws/aws-sdk-go/service/dynamodbstreams/dynamodbstreamsiface"
-	"github.com/pkg/errors"
 	"github.com/savaki/ddbstreams/internal/tree"
 )
 
@@ -29,15 +28,15 @@ func lookupStreamArn(ctx context.Context, api dynamodbstreamsiface.DynamoDBStrea
 		TableName: aws.String(tableName),
 	})
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to list streams for table, %v", tableName)
+		return "", wrapErr(err, "unable to list streams for table, %v", tableName)
 	}
 	if len(out.Streams) == 0 {
-		return "", errors.Wrapf(err, "no stream returned for table, %v", tableName)
+		return "", wrapErr(err, "no stream returned for table, %v", tableName)
 	}
 
 	streamArn := out.Streams[0].StreamArn
 	if streamArn == nil {
-		return "", errors.Wrapf(err, "no stream arn found for table, %v", tableName)
+		return "", wrapErr(err, "no stream arn found for table, %v", tableName)
 	}
 
 	return *streamArn, nil
@@ -55,7 +54,7 @@ func describeShards(ctx context.Context, api dynamodbstreamsiface.DynamoDBStream
 		}
 		out, err := api.DescribeStreamWithContext(ctx, &input)
 		if err != nil {
-			return nil, errors.Wrapf(err, "unable to describe streams for dynamodb table, %v", tableName)
+			return nil, wrapErr(err, "unable to describe streams for dynamodb table, %v", tableName)
 		}
 
 		shards = append(shards, out.StreamDescription.Shards...)

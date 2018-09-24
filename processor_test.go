@@ -16,10 +16,10 @@ package ddbstreams
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -29,11 +29,20 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodbstreams"
-	"github.com/savaki/randx"
-	"github.com/tj/assert"
 )
 
 const hashKey = "id"
+
+var r = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+func alphaN(n int) string {
+	const letters = `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
+	data := make([]byte, 0, n)
+	for i := 0; i < n; i++ {
+		data = append(data, letters[r.Intn(len(letters))])
+	}
+	return string(data)
+}
 
 func withTable(t *testing.T, callback func(ddb *dynamodb.DynamoDB, streams *dynamodbstreams.DynamoDBStreams, tableName string)) {
 	sess := session.Must(session.NewSession(aws.NewConfig().
@@ -74,21 +83,29 @@ func withTable(t *testing.T, callback func(ddb *dynamodb.DynamoDB, streams *dyna
 
 	debug.Println("creating table,", tableName)
 	_, err := ddb.CreateTable(&input)
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("got %v; want nil", err)
+	}
 
 	err = ddb.WaitUntilTableExists(&dynamodb.DescribeTableInput{
 		TableName: aws.String(tableName),
 	})
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("got %v; want nil", err)
+	}
 	debug.Println("created table,", tableName)
 
 	defer func() {
 		debug.Println("deleting table,", tableName)
 		_, err = ddb.DeleteTable(&dynamodb.DeleteTableInput{TableName: aws.String(tableName)})
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 
 		err = ddb.WaitUntilTableNotExists(&dynamodb.DescribeTableInput{TableName: aws.String(tableName)})
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 		debug.Println("table deleted")
 	}()
 
@@ -104,7 +121,9 @@ func createRecords(t *testing.T, ddb *dynamodb.DynamoDB, tableName string, n int
 				"date": {S: aws.String(time.Now().Format(time.RFC850))},
 			},
 		})
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 	}
 }
 
@@ -142,7 +161,7 @@ func TestStreamContinuesFromLastCommit(t *testing.T) {
 		}
 
 		groupID := "abc"
-		commitTable := "commits-" + randx.AlphaN(10)
+		commitTable := "commits-" + alphaN(10)
 		p := New(streams)
 
 		sub1, err = p.Subscribe(context.Background(), tableName, part1,
@@ -155,7 +174,9 @@ func TestStreamContinuesFromLastCommit(t *testing.T) {
 			WithGroupID(groupID),
 			WithOffsetManagerDynamoDB(ddb, commitTable),
 		)
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 		sub2.Wait()
 
 		time.Sleep(500 * time.Millisecond)
@@ -188,7 +209,9 @@ func TestStreams(t *testing.T) {
 
 		p := New(streams)
 		sub, err = p.Subscribe(context.Background(), tableName, handler)
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 		sub.Wait()
 	})
 }
@@ -217,8 +240,6 @@ func TestStreamsAutoCommit(t *testing.T) {
 			return nil
 		}
 
-
-
 		p := New(streams)
 		sub, err = p.Subscribe(context.Background(), tableName, handler,
 			WithTrace(log.Println),
@@ -226,7 +247,9 @@ func TestStreamsAutoCommit(t *testing.T) {
 			WithOffsetManagerDynamoDB(ddb, "offsets"),
 			WithAutoCommit(),
 		)
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("got %v; want nil", err)
+		}
 		sub.Wait()
 	})
 }

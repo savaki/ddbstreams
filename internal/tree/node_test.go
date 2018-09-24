@@ -17,22 +17,31 @@ package tree
 import (
 	"encoding/json"
 	"io/ioutil"
+	"reflect"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/service/dynamodbstreams"
-	"github.com/tj/assert"
 )
 
 func TestParse(t *testing.T) {
 	data, err := ioutil.ReadFile("testdata/ordered.json")
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("got %v; want nil", err)
+	}
 
 	var shards []*dynamodbstreams.Shard
-	assert.Nil(t, json.Unmarshal(data, &shards))
+	err = json.Unmarshal(data, &shards)
+	if err != nil {
+		t.Fatalf("got %v; want nil", err)
+	}
 
 	tree := Parse(shards)
-	assert.NotNil(t, tree)
-	assert.Len(t, tree.Children, 1)
+	if tree == nil {
+		t.Fatalf("got nil; want not nill")
+	}
+	if got, want := len(tree.Children), 1; got != want {
+		t.Fatalf("got %v; want %v", got, want)
+	}
 
 	t.Run("reversed", func(t *testing.T) {
 		var reversed []*dynamodbstreams.Shard
@@ -41,7 +50,9 @@ func TestParse(t *testing.T) {
 		}
 
 		reverseTree := Parse(reversed)
-		assert.EqualValues(t, tree, reverseTree)
+		if got, want := reverseTree, tree; !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %v; want %v", got, want)
+		}
 	})
 
 	t.Run("DFS", func(t *testing.T) {
@@ -59,6 +70,8 @@ func TestParse(t *testing.T) {
 			"shardId-00000001535139002824-8551ec4b",
 			"shardId-00000001535151610690-856f1cc6",
 		}
-		assert.Equal(t, want, got)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %v; want %v", got, want)
+		}
 	})
 }

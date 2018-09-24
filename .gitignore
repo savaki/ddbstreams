@@ -5,6 +5,7 @@
 *.ipr
 *.iws
 
-# ignore samples
+# ignore generated files
 #
-/sample.*
+go.sum
+
