@@ -1,4 +1,3 @@
 module github.com/savaki/ddbstreams
 
-require
-
+require github.com/aws/aws-sdk-go v1.15.1
