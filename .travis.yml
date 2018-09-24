@@ -1,20 +1,20 @@
 sudo: required
-
 services:
-  - docker
-
+- docker
 language: go
-
 go_import_path: github.com/savaki/ddbstreams
-
 before_install:
-  - docker pull amazon/dynamodb-local:latest
-  - docker run -d -p 127.0.0.1:8000:8000 amazon/dynamodb-local:latest
-  - go get -t ./...
-
+- docker pull amazon/dynamodb-local:latest
+- docker run -d -p 127.0.0.1:8000:8000 amazon/dynamodb-local:latest
+- go get -t ./...
+- go get github.com/mattn/goveralls
 go:
-  - "1.9.x"
-  - "1.10.x"
-  - "1.11.x"
-
-script: go test ./...
+- 1.9.x
+- 1.10.x
+- 1.11.x
+script: 
+- go test ./... -covermode=count -coverprofile=coverage.out
+- $GOPATH/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
+env:
+  matrix:
+    secure: Dowh7QWi9++Pdvn6+l3iXQXNmnRZfh5JorsFYLkhddg7AfTRFmUkBtIBThiCW8bdZiIt8UGu0zK2FB388ysrBGHH2HRxO/eP71xZD4PD3/7BbXDDU0hecmJ7nWHSwnnBZPIWxaWExFP7MZMwz/cK23g80GjHjWgqIA8IocNs5oQlwi9KWuJP4Ollan3fqAH/d+h0QGIwgdRm5jz7ZpEnhWI0qfqqMAFEuM+cwXNWPUVhWQ5BxBet74dfK5kERmC2jwbcOSmdHbQUtcL36rRULG0soZ/nss48TgZCn6r5dFiDqAGYpLau/4HBses+wZoDNa7JAXLkLpVyj0XRmAFjR8vfNZFsjx/ebr8SeAzvo/3VEdK2eLhJrfu/wQtQhoIkUgJZMVzJKjH93AGlrl9SzVhPuYTbuUGLDDuqf8usGUdAvEJy/IrI7CYvrpVQ3ol1Jcm6d0ThwWWV5PdEbFwPXlg0oVYie1Dh27mzTH2c2nWtxPmE7JvYiywOzprF8gF1aPNSpGDSgJtXJrvUAxVSoTPYJOD/nzYNYN62J1b5CH4BOQkAQ2xfwKKK4GPQNb+VglrX4mB/qwNvrym2i/CC2OMEX8DnLJ7oYVWiy4jEI/yrsaPPPnhNk5MDvnrwikie/SULKR2hc26JwyhDcY1TNGjg3A3xtBoGAjUwbO4bux4=
