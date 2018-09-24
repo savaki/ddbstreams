@@ -67,3 +67,7 @@ func main() {
 * `WithOffsetManager` - defines storage for persistent offsets
 * `WithAutoCommit` - requests offsets be published after every commit.  Only used in
 conjunction with `WithOffsetManager` or `WithOffsetManagerDynamoDB`
+
+### Prerequisites
+
+Requires go 1.9 or later.
