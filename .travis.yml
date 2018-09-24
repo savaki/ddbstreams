@@ -9,24 +9,13 @@ before_install:
 - go get -t ./...
 - go get github.com/mattn/goveralls
 
-matrix:
-  include:
-  - go: 1.9.x
-    env: COVERALLS=0
-  - go: 1.10.x
-    env: COVERALLS=1
-  - go: 1.11.x
-    env: COVERALLS=1
-
 go:
-- 1.9.x
 - 1.10.x
 - 1.11.x
 
 script:
-- sh -c "if [ $COVERALLS = '0' ] ; then go test ./...; fi"
-- sh -c "if [ $COVERALLS = '1' ] ; then go test ./... -covermode=count -coverprofile=coverage.out; fi"
-- sh -c "if [ $COVERALLS = '1' ] ; then $GOPATH/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN; fi"
+- go test ./... -covermode=count -coverprofile=coverage.out
+- $GOPATH/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
 
 env:
   matrix:
